@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar sintaxe do código Python
+        run: python3 -m py_compile package/usr/share/mainuan-store/*.py
+
+      - name: Ler a versão do pacote
+        id: ver
+        run: |
+          VERSION=$(sed -n 's/^Version: //p' package/DEBIAN/control)
+          echo "deb=mainuan-store_$(echo "$VERSION" | tr . _).deb" >> "$GITHUB_OUTPUT"
+
+      - name: Compilar o pacote DEB
+        run: dpkg-deb --root-owner-group --build package "${{ steps.ver.outputs.deb }}"
+
+      - name: Mostrar o conteúdo do pacote
+        run: |
+          dpkg-deb -I "${{ steps.ver.outputs.deb }}"
+          dpkg-deb -c "${{ steps.ver.outputs.deb }}" | head -n 40
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.deb }}
+          path: ${{ steps.ver.outputs.deb }}
+
+  release:
+    # Ao criar uma etiqueta (ex.: v0.6.2) o .deb é anexado à Release automaticamente.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Publicar a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*/*.deb \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Mainuan Store ${GITHUB_REF_NAME#v}" \
+            --generate-notes

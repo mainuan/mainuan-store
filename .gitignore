@@ -1,0 +1,13 @@
+# Pacotes compilados (publicam-se nas Releases, não no repositório)
+*.deb
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*~
