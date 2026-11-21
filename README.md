@@ -4,7 +4,7 @@
 
 # MAINUAN STORE
 
-![Versão](https://img.shields.io/badge/versão-0.6.2-0fb5c4)
+![Versão](https://img.shields.io/badge/versão-0.6.3-0fb5c4)
 ![Licença](https://img.shields.io/badge/licença-GPL--3.0--or--later-blue)
 ![Plataforma](https://img.shields.io/badge/plataforma-Linux-lightgrey)
 ![Idiomas](https://img.shields.io/badge/idiomas-PT%20%7C%20BR%20%7C%20EN%20%7C%20FR%20%7C%20ES-0fb5c4)
@@ -70,7 +70,7 @@ Aplicações exclusivas, instaladas e atualizadas a partir das *releases* do Git
 Descarrega o ficheiro `.deb` mais recente na página de [Releases](../../releases) e instala:
 
 ```bash
-sudo apt install ./mainuan-store_0.6.2.deb
+sudo apt install ./mainuan-store_0.6.3.deb
 ```
 
 Depois abre **Mainuan Store** no menu de aplicações, ou executa no terminal:
@@ -84,7 +84,7 @@ mainuan-store
 ```bash
 git clone https://github.com/mainuan/mainuan-store.git
 cd mainuan-store
-dpkg-deb --root-owner-group --build package mainuan-store_0.6.2.deb
+dpkg-deb --root-owner-group --build package mainuan-store_0.6.3.deb
 ```
 
 ## Estrutura do projeto
@@ -118,6 +118,22 @@ Distribuído sob a licença **GPL-3.0 ou posterior**. Vê o ficheiro [LICENSE](L
 ## Autor
 
 **David Caixinha** — tugatechlabDC
+
+## [0.6.3] - 2026-11-21
+
+### Adicionado
+- Banner temporário "8 apps exclusivas Mainuan" (`banners/00-apps-exclusivas-mainuan.jpg`), mostrado como 2.º banner, logo a seguir ao BEM-VINDO, de 2026-11-21 até 2027-08-30 (configurado em `banners/banners.json`).
+- Pasta `/appimage` na raiz do disco, criada na instalação.
+
+### Alterado
+- As AppImages passam de `~/AppImages` para `/appimage`. As que já existiam são migradas automaticamente.
+- `/appimage` fica protegida enquanto houver AppImages configuradas na loja: dono root e atributo imutável, sem permissões para o utilizador apagar ou alterar pastas ou ficheiros. Adicionar, atualizar e remover AppImages passa pelo helper (pkexec).
+- Ao desinstalar a loja, a proteção é retirada e a pasta é devolvida ao utilizador.
+- Novo ícone: azul da app (`#0399b2` → `#02829a`) e saco branco maior.
+- Nova dependência: `e2fsprogs` (chattr).
+
+### Corrigido
+- Idioma pt-BR: sistemas em português do Brasil eram detetados como pt-PT. A deteção percorre agora todas as entradas de `LANGUAGE`, aceita `pt-BR`, e distingue a região quando só vem `pt`.
 
 ## 🆕 Nova Versão 0.6.2 (19 Novembro 2026)
 

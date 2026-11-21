@@ -36,3 +36,9 @@ Crie nesta pasta um ficheiro "banners.json" (ver banners.json.exemplo):
 
 Todos os campos sao opcionais. Sem banners.json os banners apenas rodam.
 Se a pasta nao tiver banners, mostra-se apenas o banner "Bem-vindo".
+
+BANNER ATUAL (temporario)
+-------------------------
+00-apps-exclusivas-mainuan.jpg  -> mostra as 8 apps exclusivas Mainuan.
+Aparece como 2.o banner (logo a seguir ao "Bem-vindo") e e mostrado de 2026-11-21
+ate 2027-08-30 (inclusive); depois dessa data deixa de aparecer sozinho (ver banners.json).

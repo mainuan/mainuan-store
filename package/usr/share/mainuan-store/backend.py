@@ -19,7 +19,7 @@ from PySide6.QtCore import Property, QObject, QSettings, QUrl, Signal, Slot
 import appimage_core as AI
 from strings import EN, STRINGS
 
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.6.3"
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
 DEB_DIR = os.path.join(BASE, "debs")
@@ -94,19 +94,37 @@ def gh_repo(links):
     return ""
 
 
+def _entries(raw):
+    """Entradas de uma lista de locales (ex.: "pt_BR:pt:en", "pt-BR", "pt_br.UTF-8")."""
+    out = []
+    for e in (raw or "").split(":"):
+        e = e.strip().split(".")[0].split("@")[0].replace("-", "_")
+        if e and e not in ("C", "POSIX"):
+            out.append(e)
+    return out
+
+
+def _code_of(entry):
+    """Código de idioma da app para uma entrada; "pt" sem região devolve "pt"."""
+    low = entry.lower()
+    if low == "pt":
+        return "pt"
+    if low.startswith("pt_"):
+        return "pt_BR" if low[3:5] == "br" else "pt_PT"
+    for pre in ("fr", "es"):
+        if low == pre or low.startswith(pre + "_"):
+            return pre
+    return "en" if low else ""
+
+
 def _lang_code(raw):
-    raw = (raw or "").split(":")[0].split(".")[0].split("@")[0]
-    if not raw or raw in ("C", "POSIX"):
-        return ""
-    if raw.startswith("pt_BR"):
-        return "pt_BR"
-    if raw.startswith("pt"):
-        return "pt_PT"
-    if raw.startswith("fr"):
-        return "fr"
-    if raw.startswith("es"):
-        return "es"
-    return "en"
+    for e in _entries(raw):
+        code = _code_of(e)
+        if code and code != "pt":
+            return code
+        if code == "pt":
+            return "pt_PT"
+    return ""
 
 
 def _conf_value(path, keys):
@@ -121,24 +139,45 @@ def _conf_value(path, keys):
     return ""
 
 
+def _pt_region(sources):
+    """"pt" sem região: procura "pt_BR" noutras fontes; senão usa o fuso horário."""
+    for raw in sources:
+        for e in _entries(raw):
+            if e.lower().startswith("pt_"):
+                return "pt_BR" if e[3:5].lower() == "br" else "pt_PT"
+    try:
+        with open("/etc/timezone", encoding="utf-8") as f:
+            tz = f.read().strip()
+    except OSError:
+        tz = os.path.realpath("/etc/localtime")
+    if tz.startswith("America/") or "/America/" in tz:
+        return "pt_BR"
+    return "pt_PT"
+
+
 def detect_lang():
     """Idioma do sistema (variáveis de ambiente da sessão; depois ficheiros de configuração
-    do KDE/Ubuntu e, por fim, o locale do Qt). Devolve um código existente em STRINGS."""
-    for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
-        code = _lang_code(os.environ.get(var, ""))
-        if code:
-            return code
-    for path, keys in ((os.path.join(HOME, ".config", "plasma-localerc"), ("LANGUAGE", "LANG")),
-                       ("/etc/default/locale", ("LANG", "LC_MESSAGES")),
-                       ("/etc/locale.conf", ("LANG", "LC_MESSAGES"))):
-        code = _lang_code(_conf_value(path, keys))
-        if code:
-            return code
+    do KDE/Ubuntu e, por fim, o locale do Qt). Percorre TODAS as entradas de LANGUAGE
+    (ex.: "pt_BR:pt:en") e distingue pt_BR de pt_PT. Devolve um código existente em STRINGS."""
+    sources = [os.environ.get(v, "") for v in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG")]
+    sources += [_conf_value(os.path.join(HOME, ".config", "plasma-localerc"), ("LANGUAGE",)),
+                _conf_value(os.path.join(HOME, ".config", "plasma-localerc"), ("LANG",)),
+                _conf_value("/etc/default/locale", ("LANG", "LC_MESSAGES")),
+                _conf_value("/etc/locale.conf", ("LANG", "LC_MESSAGES"))]
     try:
         from PySide6.QtCore import QLocale
-        return _lang_code(QLocale.system().name()) or "en"
+        sources.append(QLocale.system().name())
+        sources += list(QLocale.system().uiLanguages())
     except Exception:  # noqa: BLE001
-        return "en"
+        pass
+    for raw in sources:
+        for e in _entries(raw):
+            code = _code_of(e)
+            if code == "pt":
+                return _pt_region(sources)
+            if code:
+                return code
+    return "en"
 
 
 def parse_desktop(path, lang):
@@ -1814,8 +1853,8 @@ class Backend(QObject):
         asset = self._gh_asset(v["repo"])
         if not asset:
             return False, "no AppImage found in releases"
-        os.makedirs(APPIMG_DIR, exist_ok=True)
-        dest = os.path.join(APPIMG_DIR, slugify(v["pkg"]) + ".AppImage")
+        os.makedirs(str(AI.TMP_DIR), exist_ok=True)
+        dest = os.path.join(str(AI.TMP_DIR), slugify(v["pkg"]) + ".AppImage")
         self._download(asset[2], dest, lambda p: cb(p * 0.9),
                        lambda: getattr(self._tl, "key", None) in self._cancel)
         if not AI.is_appimage_file(dest):
@@ -1824,7 +1863,7 @@ class Backend(QObject):
             except OSError:
                 pass
             return False, "the downloaded file is not a valid AppImage"
-        app = AI.add_appimage(dest, display_name=v["pkg"], progress=lambda p: cb(90 + p / 10.0))
+        app = AI.add_appimage(dest, copy=False, display_name=v["pkg"], progress=lambda p: cb(90 + p / 10.0))
         self._ai_index(v["pkg"], app)
         cb(100)
         return True, ""

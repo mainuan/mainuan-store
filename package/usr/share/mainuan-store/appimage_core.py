@@ -5,7 +5,9 @@ Baseado no Mainuan AppImage Manager, com correções para Ubuntu/Kubuntu:
     "user namespaces" do Ubuntu 23.10+/24.04 que impede as apps Electron de arrancar;
   * entradas .desktop válidas (Exec com aspas/escapes) para aparecerem no menu iniciar;
   * ícone extraído do AppImage e cache de menus atualizada (GNOME/KDE).
-Pasta dos AppImages: ~/AppImages (a mesma do Mainuan AppImage Manager).
+Pasta dos AppImages: /appimage (raiz do disco), protegida: pertence ao root e o utilizador
+não pode apagar nem alterar o conteúdo enquanto houver AppImages configuradas na loja. Todas as
+alterações (adicionar, atualizar, remover) passam pelo helper.py via pkexec.
 """
 import dataclasses
 import json
@@ -22,11 +24,14 @@ from typing import Optional
 from urllib.parse import urlparse
 
 HOME = Path.home()
-APPIMAGES_DIR = HOME / "AppImages"
-ICONS_DIR = APPIMAGES_DIR / ".icons"
+APPIMAGES_DIR = Path("/appimage")
+HOME_APPIMAGES = HOME / "AppImages"          # pasta usada até à versão 0.6.2
 LEGACY_DIR = HOME / "Applications"          # pasta usada pelas versões antigas da loja
 DESKTOP_DIR = HOME / ".local" / "share" / "applications"
 STORE_DATA = HOME / ".local" / "share" / "mainuan-store"
+ICONS_DIR = STORE_DATA / "icons"
+HELPER = Path(__file__).resolve().parent / "helper.py"
+TMP_DIR = HOME / ".cache" / "mainuan-store" / "appimage"
 RUN_SCRIPT = STORE_DATA / "appimage-run"
 PKG_RUN_SCRIPT = Path(__file__).resolve().parent / "appimage-run"
 UA = {"User-Agent": "MainuanStore/appimage"}
@@ -342,9 +347,30 @@ def extract_metadata(appimage_path, app_id):
         shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
 
-# ------------------------------------------------------------------ gestor
+# ------------------------------------------------------------------ pasta protegida
+def _helper(*args):
+    """Corre o helper como root (pkexec). Levanta OSError se falhar ou for cancelado."""
+    r = subprocess.run(["pkexec", str(HELPER), "appimage", *map(str, args)],
+                       capture_output=True, text=True)
+    if r.returncode == 126 or r.returncode == 127:
+        raise OSError("authorization cancelled")
+    if r.returncode == 17:
+        raise FileExistsError(args[2] if len(args) > 2 else "")
+    if r.returncode != 0:
+        raise OSError((r.stderr or r.stdout or "helper failed").strip())
+
+
+def put_file(source, name, replace=False):
+    """Copia `source` para /appimage/<name> (root, 0755, protegido)."""
+    _helper("put", source, name, *(["replace"] if replace else []))
+
+
+def remove_file(name):
+    _helper("rm", name)
+
+
 def _ensure_dirs():
-    APPIMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
     ICONS_DIR.mkdir(parents=True, exist_ok=True)
     DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -400,7 +426,11 @@ def list_installed():
         if target.startswith(str(APPIMAGES_DIR)):
             desktop_map[target] = (dp, entry)
     result = []
-    for p in sorted(APPIMAGES_DIR.iterdir(), key=lambda x: x.name.lower()):
+    try:
+        listing = sorted(APPIMAGES_DIR.iterdir(), key=lambda x: x.name.lower())
+    except OSError:
+        listing = []
+    for p in listing:
         if p.suffix.lower() != ".appimage" or not p.is_file():
             continue
         try:
@@ -424,8 +454,7 @@ def find(file_path):
 
 
 def _integrate(dest, display_name=None):
-    """Extrai metadados e cria a entrada no menu para um AppImage já em ~/AppImages."""
-    dest.chmod(0o755)
+    """Extrai metadados e cria a entrada no menu para um AppImage já em /appimage."""
     meta = extract_metadata(dest, safe_name(dest.stem))
     name = meta.get("name") or display_name or dest.stem
     app_id = safe_name(name)
@@ -447,7 +476,7 @@ def _integrate(dest, display_name=None):
 
 
 def add_appimage(source, copy=True, display_name=None, progress=None):
-    """Copia/move um AppImage para ~/AppImages e integra-o no menu. Devolve AppImage."""
+    """Copia/move um AppImage para /appimage (via helper) e integra-o no menu."""
     _ensure_dirs()
     source = Path(source)
     if not source.is_file():
@@ -460,10 +489,12 @@ def add_appimage(source, copy=True, display_name=None, progress=None):
         dest = _unique(APPIMAGES_DIR / (source.stem + ".AppImage"))
         if progress:
             progress(5)
-        if copy:
-            shutil.copy2(str(source), str(dest))
-        else:
-            shutil.move(str(source), str(dest))
+        put_file(str(source), dest.name)
+        if not copy:
+            try:
+                source.unlink()
+            except OSError:
+                pass
     if progress:
         progress(60)
     app = _integrate(dest, display_name)
@@ -480,40 +511,46 @@ def integrate_existing(file_path):
 
 
 def migrate_legacy():
-    """Move os AppImages instalados pelas versões antigas da loja (~/Applications) para
-    ~/AppImages e volta a integrá-los (entradas antigas não arrancavam no Ubuntu)."""
+    """Move os AppImages das versões anteriores (~/Applications e ~/AppImages) para /appimage
+    (pasta protegida) e volta a integrá-los. Devolve o número de AppImages migrados."""
     moved = 0
-    if not LEGACY_DIR.is_dir():
-        return moved
-    for p in list(LEGACY_DIR.iterdir()):
-        if p.suffix.lower() != ".appimage" or not p.is_file() or not is_appimage_file(p):
+    for old_dir in (LEGACY_DIR, HOME_APPIMAGES):
+        if not old_dir.is_dir():
             continue
-        old_desktop = DESKTOP_DIR / ("mainuan-appimage-%s.desktop" % re.sub(r"[^a-z0-9]+", "-", p.stem.lower()).strip("-"))
-        try:
-            _ensure_dirs()
-            dest = _unique(APPIMAGES_DIR / p.name)
-            shutil.move(str(p), str(dest))
-            if old_desktop.exists():
-                old_desktop.unlink()
-            _integrate(dest, p.stem)
-            moved += 1
-        except (OSError, ValueError):
-            pass
-    # entradas antigas do menu que ainda apontam para ~/Applications e já não existem
-    for dp in DESKTOP_DIR.glob(DESKTOP_PREFIX + "*.desktop"):
-        entry = parse_desktop_file(dp)
-        if str(LEGACY_DIR) in entry.get("Exec", "") and "X-Mainuan-AppImage" not in entry:
+        for p in list(old_dir.iterdir()):
+            if p.suffix.lower() != ".appimage" or not p.is_file() or not is_appimage_file(p):
+                continue
             try:
-                dp.unlink()
+                _ensure_dirs()
+                dest = _unique(APPIMAGES_DIR / p.name)
+                put_file(str(p), dest.name)
+                for dp in list(DESKTOP_DIR.glob("*.desktop")):
+                    ex = parse_desktop_file(dp)
+                    if ex.get("TryExec") == str(p) and dp.name.startswith(DESKTOP_PREFIX):
+                        dp.unlink()
+                p.unlink()
+                _integrate(dest, p.stem)
                 moved += 1
-            except OSError:
+            except (OSError, ValueError):
                 pass
+        # entradas antigas do menu que ainda apontam para a pasta antiga e já não existem
+        for dp in DESKTOP_DIR.glob(DESKTOP_PREFIX + "*.desktop"):
+            entry = parse_desktop_file(dp)
+            if str(old_dir) in entry.get("Exec", "") and not Path(entry.get("TryExec", "/nonexistent")).exists():
+                try:
+                    dp.unlink()
+                    moved += 1
+                except OSError:
+                    pass
+        # ícones antigos de ~/AppImages/.icons deixam de ser necessários
+        if old_dir == HOME_APPIMAGES:
+            shutil.rmtree(str(old_dir / ".icons"), ignore_errors=True)
+        try:
+            old_dir.rmdir()
+        except OSError:
+            pass
     if moved:
         refresh_menus()
-    try:
-        LEGACY_DIR.rmdir()
-    except OSError:
-        pass
     return moved
 
 
@@ -540,7 +577,7 @@ def delete(file_path):
     if a.icon_path and a.icon_path.exists() and str(a.icon_path).startswith(str(ICONS_DIR)):
         a.icon_path.unlink()
     if a.file_path.exists():
-        a.file_path.unlink()
+        remove_file(a.file_path.name)
     refresh_menus()
 
 
@@ -741,7 +778,8 @@ def download_update(file_path, url, asset_name, progress=None, cancelled=None):
     new_path = APPIMAGES_DIR / asset_name
     if new_path.exists() and new_path != a.file_path:
         new_path = _unique(new_path)
-    tmp = Path(str(new_path) + ".part")
+    _ensure_dirs()
+    tmp = TMP_DIR / (new_path.name + ".part")
     try:
         req = urllib.request.Request(url, headers=UA)
         with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
@@ -758,12 +796,11 @@ def download_update(file_path, url, asset_name, progress=None, cancelled=None):
                     progress(done * 100.0 / total)
         if not is_appimage_file(tmp):
             raise ValueError("downloaded file is not an AppImage")
-        tmp.chmod(0o755)
         old_icon, old_desktop = a.icon_path, a.desktop_file_path
         meta = dict(name=a.name, update_url=a.update_url, run_as_root=a.run_as_root)
+        put_file(str(tmp), new_path.name, replace=(new_path == a.file_path))
         if a.file_path.exists() and a.file_path != new_path:
-            a.file_path.unlink()
-        tmp.replace(new_path)
+            remove_file(a.file_path.name)
         if old_desktop and old_desktop.exists():
             old_desktop.unlink()
         fresh = _integrate(new_path, meta["name"])
@@ -771,6 +808,5 @@ def download_update(file_path, url, asset_name, progress=None, cancelled=None):
             update_info(fresh.file_path, fresh.name, fresh.version, fresh.comment, fresh.categories,
                         meta["update_url"], meta["run_as_root"])
         return str(new_path)
-    except Exception:
+    finally:
         tmp.unlink(missing_ok=True)
-        raise
