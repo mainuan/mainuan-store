@@ -30,12 +30,15 @@ def tr(key, **kw):
 
 
 def make_icon(n):
-    """Logo da loja com um círculo vermelho e o número de atualizações."""
+    """Ícone do tema ativo com um círculo vermelho e o número de atualizações."""
     icon = QIcon()
-    base = QPixmap(os.path.join(ASSETS, "logo.png"))
+    base = QIcon.fromTheme("mainuan-store")
     text = "99+" if n > 99 else str(n)
     for size in (22, 32, 48, 64, 128):
-        pm = base.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        pm = base.pixmap(size, size)
+        if pm.isNull():
+            pm = QPixmap(size, size)
+            pm.fill(Qt.GlobalColor.transparent)
         p = QPainter(pm)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         d = size * 0.58
