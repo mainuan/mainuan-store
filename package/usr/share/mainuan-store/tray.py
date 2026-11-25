@@ -17,7 +17,6 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 import backend as be
 from strings import EN, STRINGS
 
-ASSETS = os.path.join(be.BASE, "assets")
 FIRST_CHECK_MS = 90 * 1000              # 1.º controlo, 90 s depois de iniciar a sessão
 INTERVAL_MS = 3 * 60 * 60 * 1000        # depois, de 3 em 3 horas
 NOTIFIED = os.path.join(be.CACHE_DIR, "notified.json")
