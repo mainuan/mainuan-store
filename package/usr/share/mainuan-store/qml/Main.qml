@@ -338,7 +338,7 @@ ApplicationWindow {
                     Layout.alignment: win.compact ? Qt.AlignHCenter : Qt.AlignLeft
                     spacing: 10
                     Image {
-                        source: "file://" + Theme.assets + "/logo.png"
+                        source: "image://icon/mainuan-store"
                         sourceSize: Qt.size(88, 88)
                         Layout.preferredWidth: 40
                         Layout.preferredHeight: 40
