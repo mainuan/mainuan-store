@@ -220,7 +220,7 @@ def main():
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Mainuan Store")
     app.setDesktopFileName("mainuan-store")
-    app.setWindowIcon(QIcon(os.path.join(ASSETS, "logo.png")))
+    app.setWindowIcon(QIcon.fromTheme("mainuan-store"))
 
     theme = ThemeObject(system_is_dark(app))
 
