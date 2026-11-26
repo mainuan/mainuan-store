@@ -73,8 +73,20 @@ class ThemeObject(QObject):
             return palette
 
         accent = QColor(self._accent)
+        # A cor do tema também tinge discretamente os fundos e superfícies.
+        # Mantemos os níveis de luminosidade do desenho Mainuan para não
+        # sacrificar a leitura, mas substituímos o matiz ciano fixo pelo do KDE.
+        for key, strength in {
+            "bg": 0.18, "bg2": 0.12, "sidebar": 0.20,
+            "surface": 0.28, "banner": 0.58, "raised": 0.42, "border": 0.36,
+        }.items():
+            base = QColor(palette[key])
+            saturation = round(accent.hslSaturation() * strength)
+            tinted = QColor.fromHsl(accent.hslHue(), saturation, base.lightness())
+            palette[key] = tinted.name()
+
         # A cor escolhida no Plasma é aplicada também aos estados de foco,
-        # seleção e hover. Ajustamos apenas os tons auxiliares para manter
+        # seleção e hover. Ajustamos os tons auxiliares para preservar a
         # visibilidade quando a cor configurada é muito escura ou muito clara.
         if accent.lightness() < 100:
             soft = accent.lighter(170)
