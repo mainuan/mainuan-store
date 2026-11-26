@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 from PySide6.QtCore import (Property, QBuffer, QByteArray, QIODevice, QObject, QSize, Qt, QTimer,
                             QUrl, Signal)
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtGui import (QGuiApplication, QIcon, QImage, QImageReader, QPalette, QPixmap)
+from PySide6.QtGui import (QColor, QGuiApplication, QIcon, QImage, QImageReader, QPalette, QPixmap)
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickImageProvider
 
@@ -35,20 +35,74 @@ LIGHT = {
 
 
 class ThemeObject(QObject):
-    """Tema da app: segue automaticamente o modo claro/escuro do sistema."""
+    """Paleta da loja: conserva o estilo Mainuan e acompanha o destaque do sistema."""
 
     changed = Signal()
 
-    def __init__(self, dark=True):
+    def __init__(self, dark=True, accent=None):
         super().__init__()
-        self._dark = dark
-        self._p = DARK if dark else LIGHT
+        self._dark = bool(dark)
+        self._accent = self._as_color(accent)
+        self._p = self._build_palette()
 
-    def set_dark(self, dark):
-        if bool(dark) != self._dark:
-            self._dark = bool(dark)
-            self._p = DARK if self._dark else LIGHT
-            self.changed.emit()
+    @staticmethod
+    def _as_color(value):
+        if value is None:
+            return None
+        color = QColor(value)
+        return color if color.isValid() else None
+
+    @staticmethod
+    def _text_on(color):
+        """Escolhe preto ou branco pelo melhor contraste WCAG."""
+        channels = [c / 255.0 for c in (color.red(), color.green(), color.blue())]
+
+        def linear(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        luminance = (0.2126 * linear(channels[0])
+                     + 0.7152 * linear(channels[1])
+                     + 0.0722 * linear(channels[2]))
+        black_contrast = (luminance + 0.05) / 0.05
+        white_contrast = 1.05 / (luminance + 0.05)
+        return "#101820" if black_contrast >= white_contrast else "#ffffff"
+
+    def _build_palette(self):
+        palette = dict(DARK if self._dark else LIGHT)
+        if self._accent is None:
+            return palette
+
+        accent = QColor(self._accent)
+        # A cor escolhida no Plasma é aplicada também aos estados de foco,
+        # seleção e hover. Ajustamos apenas os tons auxiliares para manter
+        # visibilidade quando a cor configurada é muito escura ou muito clara.
+        if accent.lightness() < 100:
+            soft = accent.lighter(170)
+            strong = accent.lighter(130)
+        elif accent.lightness() > 190:
+            soft = accent.darker(108)
+            strong = accent.darker(125)
+        else:
+            soft = accent.lighter(118)
+            strong = accent.darker(125)
+
+        palette.update({
+            "primary": accent.name(),
+            "primarySoft": soft.name(),
+            "primaryDark": strong.name(),
+            "onPrimary": self._text_on(accent),
+        })
+        return palette
+
+    def set_theme(self, dark, accent=None):
+        dark = bool(dark)
+        accent = self._as_color(accent)
+        if dark == self._dark and accent == self._accent:
+            return
+        self._dark = dark
+        self._accent = accent
+        self._p = self._build_palette()
+        self.changed.emit()
 
     @Property(str, constant=True)
     def assets(self):
@@ -122,7 +176,7 @@ class ThemeObject(QObject):
     def err(self):
         return self._p["err"]
 
-
+ 
 def system_is_dark(app):
     """Modo escuro do sistema (Qt >= 6.5 diz-o; senão deduz-se da paleta)."""
     scheme_cls = getattr(Qt, "ColorScheme", None)
@@ -137,6 +191,34 @@ def system_is_dark(app):
         except Exception:  # noqa: BLE001
             pass
     return app.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
+def system_accent(app):
+    """Cor de destaque configurada no KDE Plasma ou disponibilizada pela paleta Qt.
+
+    O KDE guarda a escolha em kdeglobals. A leitura direta cobre também o caso
+    em que a aplicação QML usa o estilo Basic e não recebe a cor Accent da
+    paleta nativa. Em outros ambientes, usamos Accent (Qt 6.6+) ou Highlight.
+    """
+    try:
+        rgb = iconcolor.accent_rgb()
+        if rgb:
+            color = QColor(*rgb)
+            if color.isValid():
+                return color
+    except (AttributeError, TypeError, ValueError):
+        pass
+
+    palette = app.palette()
+    roles = getattr(QPalette, "ColorRole", QPalette)
+    accent_role = getattr(roles, "Accent", None)
+    if accent_role is not None:
+        color = palette.color(accent_role)
+        if color.isValid():
+            return color
+
+    color = palette.color(QPalette.ColorRole.Highlight)
+    return color if color.isValid() else None
 
 
 class IconProvider(QQuickImageProvider):
@@ -236,10 +318,10 @@ def main():
     icon_timer.timeout.connect(sync_icon)
     icon_timer.start()
 
-    theme = ThemeObject(system_is_dark(app))
+    theme = ThemeObject(system_is_dark(app), system_accent(app))
 
     def refresh_theme(*_args):
-        theme.set_dark(system_is_dark(app))
+        theme.set_theme(system_is_dark(app), system_accent(app))
 
     try:
         app.styleHints().colorSchemeChanged.connect(refresh_theme)
