@@ -65,7 +65,7 @@ class ThemeObject(QObject):
                      + 0.0722 * linear(channels[2]))
         black_contrast = (luminance + 0.05) / 0.05
         white_contrast = 1.05 / (luminance + 0.05)
-        return "#101820" if black_contrast >= white_contrast else "#ffffff"
+        return "#000000" if black_contrast >= white_contrast else "#ffffff"
 
     def _build_palette(self):
         palette = dict(DARK if self._dark else LIGHT)
