@@ -15,6 +15,7 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-PT/1.1.0/).
 
 ### Alterado
 - A coluna "Ranking de Transferências" passa a **Recomendamos**.
+- A cor de destaque e os tons das superfícies da interface passam a acompanhar a cor ativa do KDE Plasma, com atualização dinâmica enquanto a loja está aberta.
 - Ao abrir a loja, a cache é limpa e as atualizações são verificadas logo.
 - No arranque do sistema, a verificação de atualizações é imediata (espera pela rede, se for preciso) e notifica na barra de notificações do sistema.
 - Novo ícone azul (SVG + PNG 16/22/24/32/48; os PNG 64/128/256 foram removidos e o SVG escalável serve esses tamanhos).
