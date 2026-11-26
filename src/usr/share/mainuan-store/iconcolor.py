@@ -70,6 +70,12 @@ def _kde():
     return accent, light
 
 
+def accent_rgb():
+    """Cor de destaque atual do KDE (AccentColor ou seleção do esquema ativo)."""
+    accent, _ = _kde()
+    return accent
+
+
 def _gsettings(key):
     if not shutil.which("gsettings"):
         return ""
