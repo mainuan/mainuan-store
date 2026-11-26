@@ -27,7 +27,7 @@ Centro de software gráfico da distribuição **Mainuan**. Instala, atualiza e r
 
 ## Funcionalidades
 
-- **Início:** banner de boas-vindas e banners rotativos (a cada 7 segundos), aplicações **Feito para o Mainuan**, aplicações por categoria e o **Ranking de Transferências**.
+- **Início:** banner de boas-vindas e banners rotativos (a cada 7 segundos), aplicações **Feito para o Mainuan**, aplicações por categoria e a seção **Recomendamos**.
 - **Explorar:** catálogo com **42 aplicações** em 13 categorias (Acessibilidade, Desenvolvimento, Educação, Escritório, Extensões de aplicações, Extensões do Plasma, Fontes, Gráficos, Internet, Jogos, Multimédia, Sistema e Utilitários), mais pesquisa em **APT, Flatpak e AppImage**.
 - **Várias fontes por aplicação:** cada aplicação mostra se está disponível em APT, Flatpak ou AppImage. Escolhes a **fonte padrão** e podes instalar de outra quando quiseres.
 - **Instaladas:** vê e remove o que tens instalado.
@@ -36,6 +36,7 @@ Centro de software gráfico da distribuição **Mainuan**. Instala, atualiza e r
 - **AppImage:** instala um ficheiro AppImage escolhendo-o ou **arrastando-o para a janela**, integra-o no menu e atualiza-o a partir de um URL do GitHub, GitLab, Codeberg ou ligação direta.
 - **Ficheiros DEB e AppImage:** a Mainuan Store abre-os com duplo clique no gestor de ficheiros.
 - **Definições:** fonte padrão, repositórios APT e Flatpak (incluindo adicionar um `.flatpakrepo`), atualizações de firmware (LVFS) e aviso de atualizações.
+- **Tema visual:** acompanha o modo claro/escuro e a cor de destaque configurada no KDE Plasma.
 - **Menu lateral reduzido ou expandido:** a tua escolha fica guardada.
 - **Multilingue:** português (PT), português (BR), inglês, francês e espanhol.
 
